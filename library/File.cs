@@ -7,8 +7,7 @@ namespace OneDrive_CSharp
     {
         Uploading = 0,
         Downloading = 1,
-        Deleting = 2,
-        FileCreation = 3
+        Deleting = 2
     }
 
     public class File
@@ -19,6 +18,57 @@ namespace OneDrive_CSharp
         public long size;
         public TimeSpan eta;
         public bool done;
+        public DateTime time;
+
+        public string timeAgo
+        {
+            get 
+            {
+                var ts = new TimeSpan(DateTime.Now.Ticks - time.Ticks);
+                double delta = Math.Abs(ts.TotalSeconds);
+
+                if (delta < 60)
+                {
+                return ts.Seconds == 1 ? "one second ago" : ts.Seconds + " seconds ago";
+                }
+                if (delta < 60 * 2)
+                {
+                return "a minute ago";
+                }
+                if (delta < 45 * 60)
+                {
+                return ts.Minutes + " minutes ago";
+                }
+                if (delta < 90 * 60)
+                {
+                return "an hour ago";
+                }
+                if (delta < 24 * 60 * 60)
+                {
+                return ts.Hours + " hours ago";
+                }
+                if (delta < 48 * 60 * 60)
+                {
+                return "yesterday";
+                }
+                if (delta < 30 * 24 * 60 * 60)
+                {
+                return ts.Days + " days ago";
+                }
+                if (delta < 12 * 30 * 24 * 60 * 60)
+                {
+                int months = Convert.ToInt32(Math.Floor((double)ts.Days / 30));
+                return months <= 1 ? "one month ago" : months + " months ago";
+                }
+                int years = Convert.ToInt32(Math.Floor((double)ts.Days / 365));
+                return years <= 1 ? "one year ago" : years + " years ago";
+            }
+        }
+
+        public File()
+        {
+            time = DateTime.Now;
+        }
 
 
         public static string ExtensionToFontAwesome(string filePath)

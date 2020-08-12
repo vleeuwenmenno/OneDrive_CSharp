@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Timers;
 
 namespace OneDrive_CSharp
 {
@@ -30,17 +31,42 @@ namespace OneDrive_CSharp
     {
         public Dictionary<string, File> files { get; private set; }
 
+        public DateTime lastUpdate {get; private set;}
+
         public string configRoot { get; private set; }
 
         public OneDriveEvent OnTransfer;
+        public OneDriveEvent OnSyncStatusChanged;
 
         private string syncRoot { get { return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/OneDrive/"; } }
 
         private Thread odMonitor;
 
-        private bool hasAuthenticated = false;
+        public bool hasAuthenticated { get; private set; }
 
         private bool verbose = false;
+
+        private bool _isActivelySyncing = false;
+
+        private System.Timers.Timer heartBeat;
+        private bool lastUpdateSync = true;
+
+        public bool isActivelySyncing 
+        {
+            get
+            {
+                if (DateTime.Now.Subtract(lastUpdate) >= TimeSpan.FromSeconds(3) && files.Count == 0)
+                    _isActivelySyncing = false;
+                else if (DateTime.Now.Subtract(lastUpdate) >= TimeSpan.FromSeconds(3) && files.Last().Value.progress == 100)
+                    _isActivelySyncing = false;
+                else if (DateTime.Now.Subtract(lastUpdate) < TimeSpan.FromSeconds(3))
+                    _isActivelySyncing = true;
+                else if (DateTime.Now.Subtract(lastUpdate) >= TimeSpan.FromSeconds(3) && files.Last().Value.progress < 100)
+                    _isActivelySyncing = true;
+
+                return _isActivelySyncing;
+            }
+        }
 
         /// <summary>
         /// Starts monitor in a new thread
@@ -54,6 +80,12 @@ namespace OneDrive_CSharp
 
                 odMonitor = new Thread(() =>
                 {
+                    heartBeat = new System.Timers.Timer();
+                    heartBeat.Interval = 1000;
+                    heartBeat.Elapsed += heartBeat_OnElapsed;
+                    heartBeat.Enabled = true;
+                    heartBeat.Start();
+                    
                     // Run onedrive monitor and hide the notifications of it
                     Misc.unix("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
                 });
@@ -61,6 +93,18 @@ namespace OneDrive_CSharp
             }
             else
                 throw new Exception("OneDrive monitor is already running ...");
+        }
+
+        private void heartBeat_OnElapsed(object sender, ElapsedEventArgs e)
+        {
+            if (OnSyncStatusChanged != null)
+            {
+                if (isActivelySyncing != lastUpdateSync)
+                {
+                    OnSyncStatusChanged(this, null);
+                    lastUpdateSync = isActivelySyncing;
+                }
+            }
         }
 
         /// <summary>
@@ -72,6 +116,12 @@ namespace OneDrive_CSharp
             {
                 if (!hasAuthenticated)
                     throw new Exception("OneDrive has not been authenticated, run authenticate() before starting sync or monitoring!");
+
+                heartBeat = new System.Timers.Timer();
+                heartBeat.Interval = 5000;
+                heartBeat.Elapsed += heartBeat_OnElapsed;
+                heartBeat.Enabled = true;
+                heartBeat.Start();
 
                 // Run onedrive monitor and hide the notifications of it
                 Misc.unix("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
@@ -134,6 +184,8 @@ namespace OneDrive_CSharp
 
                 files[val.Key] = val.Value;
 
+                lastUpdate = DateTime.Now;
+
                 if (OnTransfer != null)
                     OnTransfer(this, new OneDriveEventArgs(val.Value));
             }
@@ -154,14 +206,16 @@ namespace OneDrive_CSharp
 
                 File f = new File();
 
-                f.path = m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "");
-                f.job = m.Groups["job"].Value == "Downloading" ? JobType.Downloading : m.Groups["job"].Value == "Deleting" ? JobType.Deleting : m.Groups["job"].Value == "Uploading" ? JobType.Uploading : JobType.FileCreation;
+                f.path = m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "").StartsWith("./") ? m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "").Substring(2) : m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "");
+                f.job = m.Groups["job"].Value == "Downloading" ? JobType.Downloading : m.Groups["job"].Value == "Deleting" ? JobType.Deleting : JobType.Uploading;
                 f.done = m.Groups["path"].Value.EndsWith(" ... done.");
                 f.progress = 100;
                 f.eta = new TimeSpan();
                 f.size = System.IO.File.Exists(syncRoot + f.path) ? new System.IO.FileInfo(syncRoot + f.path).Length : 0;
 
                 files.Add(f.path, f);
+                
+                lastUpdate = DateTime.Now;
 
                 if (OnTransfer != null)
                     OnTransfer(this, new OneDriveEventArgs(f));
