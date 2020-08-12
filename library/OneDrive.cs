@@ -30,7 +30,7 @@ namespace OneDrive_CSharp
     public class OneDrive
     {
         public Dictionary<string, File> files { get; private set; }
-        public int filesMaxSize {get;set;}
+        public int filesMaxSize = 100;
 
         public DateTime lastUpdate {get; private set;}
 
@@ -157,12 +157,12 @@ namespace OneDrive_CSharp
 
         private void shrinkList()
         {
-            if (files.Count > filesMaxSize)
+            if (files.Count >= filesMaxSize)
             {
                 Console.WriteLine("History exceeding limits, stripping out oldest 5 items ... ");
                 for (int i = 5; i > 0; i--)
                     files.Remove(files.First().Key);
-                    
+
                 GC.Collect();
             }
         }

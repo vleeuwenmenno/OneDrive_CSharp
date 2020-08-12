@@ -12,15 +12,15 @@ namespace OneDrive_CSharp_Example
             od = new OneDrive();
 
             od.OnTransfer += new OneDriveEvent(onedrive_onTransfer);
+            od.OnSyncStatusChanged += new OneDriveEvent(onedrive_onSyncStatusChanged)
 
             od.authenticate();
-            od.startMonitorThread();
+            od.startMonitor();
+        }
 
-            while (true)
-            {
-                Console.WriteLine("Syncing: "+ od.isActivelySyncing);
-                Thread.Sleep(1000);
-            }
+        private static void onedrive_onSyncStatusChanged(object source, OneDriveEventArgs e)
+        {
+            Console.WriteLine("Syncing status changed to "+ od.isActivelySyncing);
         }
 
         private static void onedrive_onTransfer(object source, OneDriveEventArgs e)
