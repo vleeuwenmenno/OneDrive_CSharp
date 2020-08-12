@@ -30,6 +30,7 @@ namespace OneDrive_CSharp
     public class OneDrive
     {
         public Dictionary<string, File> files { get; private set; }
+        public int filesMaxSize {get;set;}
 
         public DateTime lastUpdate {get; private set;}
 
@@ -37,6 +38,7 @@ namespace OneDrive_CSharp
 
         public OneDriveEvent OnTransfer;
         public OneDriveEvent OnSyncStatusChanged;
+        public OneDriveEvent OnHeartBeat;
 
         private string syncRoot { get { return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/OneDrive/"; } }
 
@@ -68,6 +70,12 @@ namespace OneDrive_CSharp
             }
         }
 
+        public void stopMonitor()
+        {
+            odMonitor.Abort();
+            heartBeat.Stop();
+        }
+
         /// <summary>
         /// Starts monitor in a new thread
         /// </summary>
@@ -81,7 +89,7 @@ namespace OneDrive_CSharp
                 odMonitor = new Thread(() =>
                 {
                     heartBeat = new System.Timers.Timer();
-                    heartBeat.Interval = 1000;
+                    heartBeat.Interval = 3000;
                     heartBeat.Elapsed += heartBeat_OnElapsed;
                     heartBeat.Enabled = true;
                     heartBeat.Start();
@@ -105,6 +113,9 @@ namespace OneDrive_CSharp
                     lastUpdateSync = isActivelySyncing;
                 }
             }
+
+            if (OnHeartBeat != null)
+                OnHeartBeat(this, null);
         }
 
         /// <summary>
@@ -144,6 +155,18 @@ namespace OneDrive_CSharp
             hasAuthenticated = true;
         }
 
+        private void shrinkList()
+        {
+            if (files.Count > filesMaxSize)
+            {
+                Console.WriteLine("History exceeding limits, stripping out oldest 5 items ... ");
+                for (int i = 5; i > 0; i--)
+                    files.Remove(files.First().Key);
+                    
+                GC.Collect();
+            }
+        }
+
         private void monitorCallback(string line)
         {
             if (string.IsNullOrEmpty(line.Trim()))
@@ -151,6 +174,8 @@ namespace OneDrive_CSharp
 
             if (verbose)
                 Console.WriteLine($"VERBOSE: {line}");
+
+            shrinkList();
 
             if (line.Trim() == "done.")
             {
@@ -235,6 +260,7 @@ namespace OneDrive_CSharp
 
             this.configRoot = configRoot;
             this.verbose = verbose;
+            this.filesMaxSize = 100;
         }
     }
 }
