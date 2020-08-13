@@ -12,7 +12,7 @@ namespace OneDrive_CSharp_Example
             od = new OneDrive();
 
             od.OnTransfer += new OneDriveEvent(onedrive_onTransfer);
-            od.OnSyncStatusChanged += new OneDriveEvent(onedrive_onSyncStatusChanged)
+            od.OnSyncStatusChanged += new OneDriveEvent(onedrive_onSyncStatusChanged);
 
             od.authenticate();
             od.startMonitor();

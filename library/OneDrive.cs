@@ -161,7 +161,7 @@ namespace OneDrive_CSharp
             {
                 Console.WriteLine("History exceeding limits, stripping out oldest 5 items ... ");
                 for (int i = 5; i > 0; i--)
-                    files.Remove(files.First().Key);
+                    files.Remove(files.Last().Key);
 
                 GC.Collect();
             }
@@ -202,7 +202,7 @@ namespace OneDrive_CSharp
                 val.Value.progress = double.Parse(m.Groups["progress"].Value);
                 val.Value.job = m.Groups["job"].Value == "Downloading" ? JobType.Downloading : m.Groups["job"].Value == "Uploading" ? JobType.Uploading : JobType.Deleting;
                 val.Value.size = System.IO.File.Exists(syncRoot + val.Value.path) ? new System.IO.FileInfo(syncRoot + val.Value.path).Length : 0;
-                val.Value.done = val.Value.progress == 100;
+                val.Value.done = m.Groups["job"].Value == "Deleting" ? true : val.Value.progress == 100;
 
                 TimeSpan.TryParse(m.Groups["eta"].Value, out TimeSpan eta);
                 val.Value.eta = eta != null ? eta : new TimeSpan(0, 0, 0);
@@ -233,7 +233,7 @@ namespace OneDrive_CSharp
 
                 f.path = m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "").StartsWith("./") ? m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "").Substring(2) : m.Groups["path"].Value.Replace(" ... done.", "").Replace(" ... ", "");
                 f.job = m.Groups["job"].Value == "Downloading" ? JobType.Downloading : m.Groups["job"].Value == "Deleting" ? JobType.Deleting : JobType.Uploading;
-                f.done = m.Groups["path"].Value.EndsWith(" ... done.");
+                f.done = m.Groups["job"].Value == "Deleting" ? true : m.Groups["path"].Value.EndsWith(" ... done.");
                 f.progress = 100;
                 f.eta = new TimeSpan();
                 f.size = System.IO.File.Exists(syncRoot + f.path) ? new System.IO.FileInfo(syncRoot + f.path).Length : 0;
