@@ -128,6 +128,7 @@ namespace OneDrive_CSharp
 
                     Console.WriteLine("OneDrive is resuming ...");
                     isPaused = false;
+                    OnSyncStatusChanged(this, null);
                     Start();
 
                 }).Start();
