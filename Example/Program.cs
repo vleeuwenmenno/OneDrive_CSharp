@@ -1,6 +1,7 @@
 ﻿using System.Threading;
 using System;
 using OneDrive_CSharp;
+using System.Threading.Tasks;
 
 namespace OneDrive_CSharp_Example
 {
@@ -13,9 +14,19 @@ namespace OneDrive_CSharp_Example
 
             od.OnTransfer += new OneDriveEvent(onedrive_onTransfer);
             od.OnSyncStatusChanged += new OneDriveEvent(onedrive_onSyncStatusChanged);
+            od.OnOnlineAccessChanged += new OneDriveEvent(OneDrive_inetAccessChanged);
 
-            od.authenticate();
-            od.startMonitor();
+            od.Authenticate();
+            od.StartAsync();
+
+            Thread.Sleep(15000);
+
+            od.PauseAsync(1);
+        }
+
+        private static void OneDrive_inetAccessChanged(object source, OneDriveEventArgs e)
+        {
+            Console.WriteLine("Online access changed "+ e.GetHasInternet());
         }
 
         private static void onedrive_onSyncStatusChanged(object source, OneDriveEventArgs e)

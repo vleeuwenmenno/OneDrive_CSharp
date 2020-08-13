@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Timers;
+using System.Net.NetworkInformation;
+using System.Threading.Tasks;
 
 namespace OneDrive_CSharp
 {
@@ -15,15 +17,26 @@ namespace OneDrive_CSharp
     public class OneDriveEventArgs : EventArgs
     {
         private File fileInfo;
+        private bool hasInternet;
 
-        public OneDriveEventArgs(File file)
+        public OneDriveEventArgs(File file, bool hasInet = true)
         {
+            hasInternet = hasInet;
+
             fileInfo = file;
+
+            if (file != null)
+                hasInternet = true;
         }
 
         public File GetFileInfo()
         {
             return fileInfo;
+        }
+
+        public bool GetHasInternet()
+        {
+            return hasInternet;
         }
     }
 
@@ -39,19 +52,25 @@ namespace OneDrive_CSharp
         public OneDriveEvent OnTransfer;
         public OneDriveEvent OnSyncStatusChanged;
         public OneDriveEvent OnHeartBeat;
+        public OneDriveEvent OnOnlineAccessChanged;
 
         private string syncRoot { get { return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/OneDrive/"; } }
 
-        private Thread odMonitor;
+        private Task odMonitorTask;
+        CancellationTokenSource tokenSource;
+        CancellationToken token;
 
         public bool hasAuthenticated { get; private set; }
+        public bool isPaused { get; private set; }
 
         private bool verbose = false;
-
         private bool _isActivelySyncing = false;
+        private bool lastUpdateSync = true;
+        private bool lastPingResult = true;
+        private bool cancelPausing = false;
 
         private System.Timers.Timer heartBeat;
-        private bool lastUpdateSync = true;
+        private System.Timers.Timer pingTester;
 
         public bool isActivelySyncing 
         {
@@ -70,37 +89,124 @@ namespace OneDrive_CSharp
             }
         }
 
-        public void stopMonitor()
+        public void Stop()
         {
-            odMonitor.Abort();
+            Misc.unixProc.Kill();
+
             heartBeat.Stop();
+            pingTester.Stop();
+            tokenSource.Cancel();
+            odMonitorTask = null;
+        }
+
+        public void CancelPause()
+        {
+            cancelPausing = true;
+        }
+
+        public void PauseAsync(int mins)
+        {
+            if (!isPaused)
+            {
+                Console.WriteLine($"OneDrive paused for {mins} minute(s) ...");
+                Stop();
+                isPaused = true;
+
+                new Thread(() => 
+                {
+                    for (int i = 0; i < mins * 60; i++)
+                    {
+                        Thread.Sleep(1000);
+
+                        if (cancelPausing)
+                        {  
+                            cancelPausing = false;
+                            Console.WriteLine("OneDrive is resuming early ...");
+                            break;
+                        }
+                    }
+
+                    Console.WriteLine("OneDrive is resuming ...");
+                    isPaused = false;
+                    Start();
+
+                }).Start();
+            }
+            else 
+                throw new Exception("OneDrive was already paused!");
+        }
+
+        private bool HasInternet()
+        {
+            try 
+            { 
+                Ping myPing = new Ping();
+                String host = "1.1.1.1";
+                byte[] buffer = new byte[32];
+                int timeout = 1000;
+                PingOptions pingOptions = new PingOptions();
+                PingReply reply = myPing.Send(host, timeout, buffer, pingOptions);
+
+                return (reply.Status == IPStatus.Success);
+            }
+            catch (Exception) 
+            {
+                return false;
+            }
         }
 
         /// <summary>
         /// Starts monitor in a new thread
         /// </summary>
-        public void startMonitorThread()
+        public void StartAsync()
         {
-            if (odMonitor == null)
+            if (odMonitorTask == null)
             {
                 if (!hasAuthenticated)
                     throw new Exception("OneDrive has not been authenticated, run authenticate() before starting sync or monitoring!");
 
-                odMonitor = new Thread(() =>
+                tokenSource = new CancellationTokenSource();
+                token = tokenSource.Token;
+                odMonitorTask = new Task(() =>
                 {
                     heartBeat = new System.Timers.Timer();
                     heartBeat.Interval = 3000;
                     heartBeat.Elapsed += heartBeat_OnElapsed;
                     heartBeat.Enabled = true;
                     heartBeat.Start();
+
+                    pingTester = new System.Timers.Timer();
+                    pingTester.Interval = 30000;
+                    pingTester.Elapsed += pingTester_OnElapsed;
+                    pingTester.Enabled = true;
+                    pingTester.Start();
                     
                     // Run onedrive monitor and hide the notifications of it
-                    Misc.unix("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
+                    Misc.unix_proc("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
                 });
-                odMonitor.Start();
+                odMonitorTask.Start();
             }
             else
                 throw new Exception("OneDrive monitor is already running ...");
+        }
+
+         /// <summary>
+        /// Starts monitor in a new thread
+        /// </summary>
+        public void Start()
+        {
+            StartAsync();
+            odMonitorTask.Wait();
+        }
+
+        private void pingTester_OnElapsed(object sender, ElapsedEventArgs e)
+        {
+            bool hasInet = HasInternet();
+
+            if (hasInet != lastPingResult)
+                OnOnlineAccessChanged(this, new OneDriveEventArgs(null, hasInet));
+
+            lastPingResult = hasInet;
         }
 
         private void heartBeat_OnElapsed(object sender, ElapsedEventArgs e)
@@ -118,30 +224,7 @@ namespace OneDrive_CSharp
                 OnHeartBeat(this, null);
         }
 
-        /// <summary>
-        /// Start monitor and wait until its exited
-        /// </summary>
-        public void startMonitor()
-        {
-            if (odMonitor == null)
-            {
-                if (!hasAuthenticated)
-                    throw new Exception("OneDrive has not been authenticated, run authenticate() before starting sync or monitoring!");
-
-                heartBeat = new System.Timers.Timer();
-                heartBeat.Interval = 5000;
-                heartBeat.Elapsed += heartBeat_OnElapsed;
-                heartBeat.Enabled = true;
-                heartBeat.Start();
-
-                // Run onedrive monitor and hide the notifications of it
-                Misc.unix("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
-            }
-            else
-                throw new Exception("OneDrive monitor is already running ...");
-        }
-
-        public void authenticate()
+        public void Authenticate()
         {
             string s = Misc.unix_simple("onedrive", "", true);
             if (s.StartsWith("Authorize this app visiting:"))

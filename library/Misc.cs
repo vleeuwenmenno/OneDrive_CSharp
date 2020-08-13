@@ -5,6 +5,36 @@ namespace OneDrive_CSharp
 {
     public class Misc
     {
+        public static Process unixProc;
+        public static void unix_proc(string exec, string parameter, Action<string> callback = null, bool callbackPerLine = true)
+        {
+            unixProc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = exec,
+                    Arguments = $"{parameter}",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            unixProc.Start();
+            string output = "";
+            while (!unixProc.StandardOutput.EndOfStream)
+            {
+                string line = unixProc.StandardOutput.ReadLine();
+
+                if (callback != null && callbackPerLine)
+                    callback(line);
+
+                output += line + Environment.NewLine;
+            }
+
+            if (callback != null && !callbackPerLine)
+                callback(output);
+        }
 
         public static void unix(string exec, string parameter, Action<string> callback = null, bool callbackPerLine = true)
         {
