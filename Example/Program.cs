@@ -10,7 +10,7 @@ namespace OneDrive_CSharp_Example
         static OneDrive od;
         static void Main(string[] args)
         {
-            od = new OneDrive();
+            od = new OneDrive(true, true);
 
             od.OnTransfer += new OneDriveEvent(onedrive_onTransfer);
             od.OnSyncStatusChanged += new OneDriveEvent(onedrive_onSyncStatusChanged);
@@ -19,7 +19,7 @@ namespace OneDrive_CSharp_Example
             od.Authenticate();
             od.StartAsync();
 
-            Thread.Sleep(15000);
+            Thread.Sleep(30000);
 
             od.PauseAsync(1);
         }

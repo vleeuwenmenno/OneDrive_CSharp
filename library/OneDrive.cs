@@ -53,6 +53,7 @@ namespace OneDrive_CSharp
         public OneDriveEvent OnSyncStatusChanged;
         public OneDriveEvent OnHeartBeat;
         public OneDriveEvent OnOnlineAccessChanged;
+        public OneDriveEvent OnResume;
 
         private string syncRoot { get { return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "/OneDrive/"; } }
 
@@ -62,6 +63,7 @@ namespace OneDrive_CSharp
 
         public bool hasAuthenticated { get; private set; }
         public bool isPaused { get; private set; }
+        public bool checkNoSyncFiles {get; private set;}
 
         private bool verbose = false;
         private bool _isActivelySyncing = false;
@@ -128,9 +130,14 @@ namespace OneDrive_CSharp
 
                     Console.WriteLine("OneDrive is resuming ...");
                     isPaused = false;
-                    OnSyncStatusChanged(this, null);
-                    Start();
+                    
+                    if (OnSyncStatusChanged != null)
+                        OnSyncStatusChanged(this, null);
 
+                    if (OnResume != null)
+                        OnResume(this, null);
+
+                    Start();
                 }).Start();
             }
             else 
@@ -183,7 +190,7 @@ namespace OneDrive_CSharp
                     pingTester.Start();
                     
                     // Run onedrive monitor and hide the notifications of it
-                    Misc.unix_proc("onedrive", $"-m --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
+                    Misc.unix_proc("onedrive", $"--monitor " + (checkNoSyncFiles ? "--check-for-nosync": "") + $" --disable-notifications --confdir=\"{configRoot}\"", monitorCallback, true);
                 });
                 odMonitorTask.Start();
             }
@@ -332,7 +339,13 @@ namespace OneDrive_CSharp
             #endregion
         }
 
-        public OneDrive(bool verbose = false, string configRoot = "")
+        /// <summary>
+        /// Initialize OneDrive class
+        /// </summary>
+        /// <param name="checkNoSync">If this is set to true we will pass --check-for-nosync to the monitor process.<br/>This will check each directory for .nosync file. If present the folder will not be synced.</param>
+        /// <param name="verbose">Verbose logging. Enabling this will log the output of the onedrive process.</param>
+        /// <param name="configRoot">Config root passes --config to the onedrive process. This indicates where the config files are located for onedrive.</param>
+        public OneDrive(bool checkNoSync, bool verbose = false, string configRoot = "")
         {
             if (!Misc.unix_simple("onedrive", "--version").StartsWith("onedrive v2.3."))
                 throw new Exception("ERROR: OneDrive cli is not installed or a incompatible version is installed, expecting v2.*.\n\tInstall with: sudo apt install onedrive");
@@ -345,6 +358,7 @@ namespace OneDrive_CSharp
             this.configRoot = configRoot;
             this.verbose = verbose;
             this.filesMaxSize = 100;
+            this.checkNoSyncFiles = checkNoSync;
         }
     }
 }
